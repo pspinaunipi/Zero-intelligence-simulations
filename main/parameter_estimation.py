@@ -149,7 +149,7 @@ if __name__=="__main__":
         #market orders at the best prices (ignore hidden orders)
         X_mo = df[df["event type"] == 4]
 
-        N_mo  = len(X_mo)
+        N_mo  = len(X_mo.round(2).groupby("time").mean())
         N_lo  = len(X_lo)
         N_c   = len(X_c)
 
@@ -169,11 +169,12 @@ if __name__=="__main__":
         nu[i] = v
         mu[i] = u
         shares[i] = v0
-        volatility[i] = df["mid price"].std()
+        mp = np.log(df["mid price"].to_numpy())
+        volatility[i] = np.sqrt(((mp[1:]- mp[:-1])**2).mean())
         gap[i] = find_gap_to_spread(df)
 
         i += 1
 
     parameters = np.column_stack((date, mid_price, spread, lamb, nu, mu, shares, mean_volume,
                     volatility, gap))
-    np.savetxt("santa_fe_parameter_estimation_2.txt", parameters, delimiter = ",")
+    np.savetxt("../data/santa_fe_parameter_estimation_2.txt", parameters, delimiter = ",")
