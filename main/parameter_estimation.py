@@ -101,6 +101,24 @@ def del_time(data):
     final_data.reset_index(inplace=True)
     return final_data
 
+def unite_market_orders(data):
+    m_data = data[data["event type"] == 4]
+    m_data["time"] = (m_data["time"]*100) // 1
+    value = m_data["time"].iat[0]
+    unique_orders = []
+    #iterate over all the row in the dataframe and check if there is a difference higher
+    # than 1/100 sec between two market order, if this is not the case the two orders
+    # are considered the same
+    for i,element in enumerate(m_data["time"]):
+        if element == value:
+            j = i + 1
+            while value == element and j < len(m_data):
+                value = m_data["time"].iat[j]
+                j += 1
+            unique_orders.append(i)
+
+    m_data = m_data.iloc[unique_orders]
+    return m_data
 
 if __name__=="__main__":
 
@@ -147,7 +165,7 @@ if __name__=="__main__":
         #cancellations at the best prices
         X_c  = df_best_prices(df,3)
         #market orders at the best prices (ignore hidden orders)
-        X_mo = df[df["event type"] == 4]
+        X_mo = unite_market_orders(df)
 
         N_mo  = len(X_mo.round(2).groupby("time").mean())
         N_lo  = len(X_lo)
@@ -160,7 +178,7 @@ if __name__=="__main__":
         u  = find_u(X_mo,N_lo,N_mo,N_c,v0)
         v  = find_u(X_c,N_lo,N_mo,N_c,mean_vol)
         l_all  = find_l(N_lo,N_mo,N_c)
-        n = 2 * (1 + ((df["spread"] // 2).mean()))
+        n = 2 * (1 + ((X_lo["spread"] // 2).mean()))
         l = l_all / n
 
         mid_price[i] = df["mid price"].mean()
@@ -177,4 +195,4 @@ if __name__=="__main__":
 
     parameters = np.column_stack((date, mid_price, spread, lamb, nu, mu, shares, mean_volume,
                     volatility, gap))
-    np.savetxt("../data/santa_fe_parameter_estimation_2.txt", parameters, delimiter = ",")
+    np.savetxt("../data/santa_fe_parameter_estimation_3.txt", parameters, delimiter = ",")
