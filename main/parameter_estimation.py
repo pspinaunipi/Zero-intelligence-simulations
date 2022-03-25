@@ -44,15 +44,6 @@ def df_best_limit_prices(data,order_type):
     new_data.sort_index(inplace=True)
     return new_data
 
-def df_best_limit_prices(data,order_type):
-
-    data = data[data["event type"] == order_type]
-    data_bid = data[data["price"] == data["bid price"]]
-    data_ask = data[data["price"] == data["ask price"]]
-    new_data = pd.concat([data_ask,data_bid])
-    new_data.sort_index(inplace=True)
-    return new_data
-
 def df_best_prices(data,order_type):
     real_indexes = []
     sec_data = data[data["event type"] == order_type]
@@ -144,7 +135,7 @@ if __name__=="__main__":
     gap = np.zeros(lenght)
     i = 0
 
-    print()
+    lst_df = []
 
     for order, message in zip(order_files, message_files):
 
@@ -167,7 +158,7 @@ if __name__=="__main__":
         #market orders at the best prices (ignore hidden orders)
         X_mo = unite_market_orders(df)
 
-        N_mo  = len(X_mo.round(2).groupby("time").mean())
+        N_mo  = len(X_mo)
         N_lo  = len(X_lo)
         N_c   = len(X_c)
 
@@ -190,9 +181,41 @@ if __name__=="__main__":
         mp = np.log(df["mid price"].to_numpy())
         volatility[i] = np.sqrt(((mp[1:]- mp[:-1])**2).mean())
         gap[i] = find_gap_to_spread(df)
-
+        lst_df.append(df)
         i += 1
 
     parameters = np.column_stack((date, mid_price, spread, lamb, nu, mu, shares, mean_volume,
                     volatility, gap))
-    np.savetxt("../data/santa_fe_parameter_estimation_3.txt", parameters, delimiter = ",")
+    np.savetxt("../data/santa_fe_parameter_estimation_4.txt", parameters, delimiter = ",")
+
+    all_data = pd.concat(lst_df)
+    all_data.reset_index(inplace=True)
+    mean_vol = find_mean_vol(all_data)
+    print ("mean volume = ", mean_vol)
+
+    #limit order at the best price
+    X_lo  = df_best_limit_prices(all_data,1)
+    #cancellations at the best prices
+    X_c  = df_best_prices(all_data,3)
+    #market orders at the best prices (ignore hidden orders)
+    X_mo = unite_market_orders(all_data)
+
+    N_mo  = len(X_mo)
+    N_lo  = len(X_lo)
+    N_c   = len(X_c)
+
+    print(f"N_lo {N_lo}, N_mo {N_mo}, N_c {N_c}")
+
+    #tt = df.time.max() - df.time.min()
+    v0 = find_v0(X_lo)
+    u  = find_u(X_mo,N_lo,N_mo,N_c,v0)
+    v  = find_u(X_c,N_lo,N_mo,N_c,mean_vol)
+    l_all  = find_l(N_lo,N_mo,N_c)
+    n = 2 * (1 + ((X_lo["spread"] // 2).mean()))
+    l = l_all / n
+
+    print("Mid Price = ", df["mid price"].mean())
+    print("Spread = ", df["spread"].mean())
+    print("Lambda = ", l)
+    print("Mu = ", u)
+    print("Delta = ", v)

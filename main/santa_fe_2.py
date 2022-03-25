@@ -140,7 +140,7 @@ def do_cancel_order(arr):
 @njit()
 def out_of_equilibrium_start(maximum, iterations):
 
-    new_lob = np.zeros((iterations, maximum), dtype=np.int16)
+    new_lob = np.zeros((iterations, maximum), dtype=np.int8)
     #initialize lob
     new_lob[0][0 : maximum // 2] = 1
     new_lob[0][maximum // 2 : maximum + 1] = -1
