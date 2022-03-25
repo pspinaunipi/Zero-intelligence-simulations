@@ -104,6 +104,8 @@ for element in o_files:
   df.drop(columns = ["Unnamed: 0"], inplace = True)
   lst_df.append(df)
 
+
+
 #@title Stima parametri (ignora non matching orders)
 days = pd.unique(clean_data["Datetime"].dt.day)
 
