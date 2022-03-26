@@ -41,6 +41,8 @@ for element in trade_files:
     #delete trades befor 6:00 and after 17:00
     df = df.loc[df["DateTime"].dt.hour > 6]
     df = df.loc[df["DateTime"].dt.hour < 16]
+
+    df = df.loc[df["DateTime"].dt.day != 27]
     lst_trade.append(df)
 
 trade_df = pd.concat(lst_trade)
@@ -48,51 +50,7 @@ trade_df.head()
 
 
 #create a list of all the files in the folder
-DIR = "../data/energia/LOB_ottobre21/LOB_ottobre21/"
-lob_files =os.listdir(DIR)
-lob_files.sort()
-lst_order = []
-for element in lob_files:
-    # import data
-    df = pd.read_csv(DIR+ element)
-    df.fillna(0, inplace = True)
-
-    # delete first two column and empty LOB
-    df.drop(columns = ["Unnamed: 0", "key"], inplace = True)
-    df.drop(df[df["AskPrice_0"] == 0].index.to_list(), inplace = True)
-    df.drop(df[df["BidPrice_0"] == 0].index.to_list(), inplace = True)
-
-    # scale price to dollar cent and add mid price and spread
-    df["MidPrice"] = (df["BidPrice_0"] + df["AskPrice_0"]) / 2
-    df["Spread"] = df["AskPrice_0"] - df["BidPrice_0"]
-
-    # transform the column Datetime from string to datetime
-    df["Datetime"]= pd.to_datetime(df["Datetime"])
-
-    #delete trades befor 6:00 and after 17:00
-    df = df.loc[df["Datetime"].dt.hour > 6]
-    df = df.loc[df["Datetime"].dt.hour < 16]
-
-    #create a new column that represent second to midnight
-    seconds = np.zeros(len(df))
-    for i, date in enumerate(df["Datetime"]):
-        seconds[i] = date.second + 60 * date.minute + 3600 * date.hour + \
-                                    date.microsecond * 1e-6
-    df["Time"] = seconds
-
-    #add a column that represent the absolute change in volume between two trades
-    df["TotVolume"] = np.abs(df.iloc[:,2:-2:2].diff().fillna(0)).sum(axis = 1)
-
-    #delete rows with spread <= 0
-    df = df.loc[df["Spread"] > 0]
-
-    df = df.loc[df["Datetime"].dt.hour > 6]
-    df = df.loc[df["Datetime"].dt.hour < 16]
-
-    lst_order.append(df)
-
-clean_data = pd.concat(lst_order)
-clean_data.reset_index(inplace = True, drop = True)
+clean_data = pd.read_csv("../data/energia/order/order.csv", index_col = 0)
 
 DIR_2 = "../data/energia/order/"
 o_files =os.listdir(DIR_2)
@@ -102,13 +60,24 @@ for element in o_files:
   df = pd.read_csv(DIR_2 + element)
   df["DateTime"]= pd.to_datetime(df["DateTime"])
   df.drop(columns = ["Unnamed: 0"], inplace = True)
+
+  df["Spread"] = clean_data["Spread"] * 100
+
+  df = df.loc[df["DateTime"].dt.hour > 6]
+  df = df.loc[df["DateTime"].dt.hour < 16]
+  df= df.loc[df["Spread"] > 0]
+  df = df.loc[df["DateTime"].dt.day != 27]
   lst_df.append(df)
 
 
 
 #@title Stima parametri (ignora non matching orders)
-days = pd.unique(clean_data["Datetime"].dt.day)
-
+clean_data["DateTime"] = pd.to_datetime(clean_data["DateTime"])
+clean_data = clean_data.loc[clean_data["DateTime"].dt.hour > 6]
+clean_data = clean_data.loc[clean_data["DateTime"].dt.hour < 16]
+clean_data = clean_data[clean_data["Spread"]>0]
+clean_data = clean_data[clean_data["DateTime"].dt.day != 27]
+days = pd.unique(clean_data["DateTime"].dt.day)
 lenght = len(days)
 l = []
 u = []
@@ -118,23 +87,24 @@ spread = []
 volatility = []
 df_type = []
 
+
 for j, data in enumerate(lst_df):
-  if j != 0:
+  if j != 1:
+    print(j)
     for i,element in enumerate(days):
       # see what happens at the best quotes
-      X_lo = data.loc[(data["Type"] == "Limit") & (data["Quote"] == "0") & (data["DateTime"].dt.day == element)]
-      X_mo = data.loc[data["Type"] == "Market"].loc[data["DateTime"].dt.day == element]
-      X_c = data.loc[(data["Type"] == "Cancel") & (data["Quote"] == "0") & (data["DateTime"].dt.day == element)]
+      new_data = data.loc[data["DateTime"].dt.day == element]
+      df = clean_data.loc[clean_data["DateTime"].dt.day == element]
 
-      df = clean_data.loc[clean_data["Datetime"].dt.day == element]
+      X_lo = new_data.loc[(new_data["Type"] == "Limit") & (new_data["Quote"] == "0") ]
+      X_mo = new_data.loc[new_data["Type"] == "Market"]
+      X_c  = new_data.loc[(new_data["Type"] == "Cancel") & (new_data["Quote"] == "0")]
 
       N_lo = len(X_lo)
       N_mo = len(X_mo)
       N_c = len(X_c)
-
       tot = N_lo + N_mo + N_c
 
-      X_lo["Spread"] =  df["Spread"]*100
 
       #compute lambda, mu, delta
       v0 = X_lo["Volume"].mean()
@@ -161,6 +131,8 @@ params["Delta"] = delta
 params["MeanSpread"] = spread
 params["Volatility"] = volatility
 
+print("Number of nan values : ", params.isna().sum())
+
 #@title Simulazioni
 mean_sp = []
 vol = []
@@ -183,4 +155,4 @@ for limit, market, cancel in zip(l, u, delta):
 params["SimSpread"] = mean_sp
 params["SimVolatility"] = vol
 
-params.to_csv("PP.csv")
+params.to_csv("PP_2.csv")
