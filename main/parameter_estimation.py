@@ -178,7 +178,7 @@ if __name__=="__main__":
         nu[i] = v
         mu[i] = u
         shares[i] = v0
-        mp = np.log(df["mid price"].to_numpy())
+        mp = df["mid price"].to_numpy()
         volatility[i] = np.sqrt(((mp[1:]- mp[:-1])**2).mean())
         gap[i] = find_gap_to_spread(df)
         lst_df.append(df)
@@ -186,7 +186,7 @@ if __name__=="__main__":
 
     parameters = np.column_stack((date, mid_price, spread, lamb, nu, mu, shares, mean_volume,
                     volatility, gap))
-    np.savetxt("../data/santa_fe_parameter_estimation_4.txt", parameters, delimiter = ",")
+    np.savetxt("../data/santa_fe_parameter_estimation_5.txt", parameters, delimiter = ",")
 
     all_data = pd.concat(lst_df)
     all_data.reset_index(inplace=True)

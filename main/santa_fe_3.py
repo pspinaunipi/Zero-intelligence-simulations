@@ -91,19 +91,19 @@ def find_mid_spread_lob(lob_history):
     return mid, spr
 
 @njit()
-def do_limit_order(arr,maximum):
+def do_limit_order(arr):
 
-    distance = np.random.randint(-maximum // 2, maximum // 2)
-    mid_price = find_mid_price(arr)
-    pos = mid_price + distance
+    pos = np.random.randint(len(arr))
 
     if arr[pos] != 0:
         sign = sign_value(arr[pos])
 
     else:
-        if distance< 0:
+        mid_price = find_mid_price(arr)
+
+        if pos < mid_price:
             sign = int(1)
-        elif distance > 0:
+        elif pos > mid_price:
             sign = int(-1)
         else:
             sign = rand_sign()
@@ -157,11 +157,10 @@ def update_c_times(lst_of_lst,value):
 
 @njit()
 def find_n_cancel(arr_lob,delta):
+
     n_cancel = 0
-    distance = maximum // 2
-    mid_price = find_mid_price(arr)
     #find total number of orders
-    tot = np.abs(arr_lob[mid_price - distance : mid_price + distance]).sum()
+    tot = np.abs(arr_lob).sum()
     #find how many of those are cancelled
     '''
     for i in range(tot):
@@ -189,11 +188,12 @@ def select_random(lst, probs):
 @njit()
 def simulate_lob(limit_rate, market_rate, cancel_rate, max_val, iterations=10000):
     #initialize lob
-    lob = out_of_equilibrium_start(int(max_val*2),iterations)
+    lob = out_of_equilibrium_start(max_val,iterations)
 
     orders = List()
     lst_sign = List()
     lst_price = List()
+    lst_shift = List()
 
     i = 1
     while i < iterations:
@@ -217,7 +217,7 @@ def simulate_lob(limit_rate, market_rate, cancel_rate, max_val, iterations=10000
                 o_type = select_random(List([0,1,2]), List([prob_limit, prob_market, prob_cancel]))
                 #execute order and update lob
                 if o_type == 0:
-                    price, sign = do_limit_order(current_lob, max_val)
+                    price, sign = do_limit_order(current_lob)
                     n_limit -= 1
 
                 elif o_type == 1:
@@ -231,13 +231,24 @@ def simulate_lob(limit_rate, market_rate, cancel_rate, max_val, iterations=10000
 
                 lob[i][:] = current_lob
                 lob[i][price] += sign
-                i += 1
 
+                new_mp = find_mid_price(lob[i][:])
+                shift = int(new_mp - max_val//2)
+
+                if shift > 0:
+                    lob[i][:-shift] = lob[i][shift:]
+                    lob[i][-shift:] = np.zeros(len(lob[i][-shift:]))
+                elif shift < 0:
+                    lob[i][-shift:] = lob[i][:shift]
+                    lob[i][:-shift] = np.zeros(len(lob[i][:-shift]))
                 orders.append(o_type)
                 lst_sign.append(sign)
                 lst_price.append(price)
+                lst_shift.append(shift)
 
-    return  lob, orders, lst_sign, lst_price
+                i += 1
+
+    return  lob, orders, lst_sign, lst_price, lst_shift
 
 @njit()
 def find_second_best(array):
@@ -292,20 +303,20 @@ if __name__ == "__main__":
     rate_m   = 0.055
     rate_del = 0.107
 
-    lob = simulate_lob(rate_lim, rate_m, rate_del, 1000, 50_000)
+    lob, order, typ, pric, shift  = simulate_lob(rate_lim, rate_m, rate_del,1000,200_000)
 
     md, sp = find_mid_spread_lob(lob)
 
-    fig , ax = plt.subplots(2,2,figsize = (12,9))
+    fig,ax = plt.subplots(1, 1, figsize = (10,7))
+    plt.bar(np.arange(1000), lob[-1])
+    plt.title("LOB order queue", fontsize =22 )
+    plt.ylabel("# orders", fontsize = 18)
+    plt.xlabel("price", fontsize = 18)
+    plt.show()
 
-    ax[0,0].plot(md)
-    ax[0,0].set_ylabel(r"$m_p$")
-    ax[0,0].set_title("Mid price")
-    ax[1,0].hist(md)
-    ax[0,1].plot(sp)
-    ax[0,1].set_ylabel(r"$s_p$")
-    ax[0,1].set_title("Spread")
-    ax[1,1].hist(sp,bins=np.arange(0,100,5))
-
+    plt.plot(md[1:] + shift)
+    plt.show()
+    plt.plot(sp)
     plt.show()
     print(sp.mean())
+    print(((md[1:] - md[:-1])**2).mean())
