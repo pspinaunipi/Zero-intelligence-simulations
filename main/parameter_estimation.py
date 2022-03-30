@@ -28,7 +28,7 @@ def load_LOB_data(o_name, m_name):
     header_list_1 = ["time","event type","size","price","direction"]
 
     # import the price and volumes of the best quotes
-    df_message = pd.read_csv(m_name, names = header_list_1, usecols = [0,1, 3, 4, 5])
+    df_message = pd.read_csv(m_name, names = header_list_1, usecols = [0, 1, 3, 4, 5])
     df_message["price"] = df_message["price"] / 100
 
     df_merge = pd.concat([df_order, df_message], axis=1)
@@ -189,14 +189,14 @@ if __name__=="__main__":
         N_mo  = len(X_mo)
         N_lo  = len(X_lo)
         N_c   = len(X_c)
-
+        tot   = N_mo + N_lo + N_c
         print(f"N_lo {N_lo}, N_mo {N_mo}, N_c {N_c}")
 
         #tt = df.time.max() - df.time.min()
         v0 = find_v0(X_lo)
-        u  = find_u(X_mo,N_lo,N_mo,N_c,v0)
-        v  = find_u(X_c,N_lo,N_mo,N_c,mean_vol)
-        l_all  = find_l(N_lo,N_mo,N_c)
+        u  = 0.5 / tot * X_mo["size"].sum() / v0
+        v  = 0.5 / tot * X_c["size"].sum() / mean_vol
+        l_all  = 0.5 * N_lo / tot
         n = 2 * (1 + ((X_lo["spread"] // 2).mean()))
         l = l_all / n
 
@@ -214,4 +214,4 @@ if __name__=="__main__":
 
     parameters = np.column_stack((date, mid_price, spread, lamb, nu, mu, shares, mean_volume,
                     volatility, gap))
-    np.savetxt("../data/santa_fe_parameter_estimation_6.txt", parameters, delimiter = ",")
+    np.savetxt("../data/santa_fe_parameter_estimation_8.txt", parameters, delimiter = ",")
