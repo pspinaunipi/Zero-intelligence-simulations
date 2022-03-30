@@ -110,14 +110,14 @@ for j, data in enumerate(lst_df):
       v0 = X_lo["Volume"].mean()
       vv = (df["BidVolume_0"].mean() + df["AskVolume_0"].mean()) / 2
       u.append(0.5 / tot / v0 * (X_mo["Volume"].sum()))
-      all_l = .5 * N_lo / tot
+      all_l =  N_lo / tot
       n = 2 * (1 + ((X_lo["Spread"] // 2).mean()))
       l.append(all_l / n)
       delta.append(.5 / tot / vv * (X_c["Volume"].sum()))
       #compute volatility and mid spread for the day
       date.append(element)
       spread.append(df["Spread"].multiply(100).mean())
-      mp = np.log(df["MidPrice"].multiply(100).to_numpy())
+      mp = df["MidPrice"].multiply(100).to_numpy()
       volatility.append(np.sqrt(((mp[1:]- mp[:-1])**2).mean()))
       df_type.append(o_files[j])
 
@@ -149,10 +149,10 @@ for limit, market, cancel in zip(l, u, delta):
         print("Fail")
   mean_sp.append(sp.mean())
   mm = np.log(md)
-  vol.append(np.sqrt(((mm[1:]- mm[:-1])**2).mean()))
+  vol.append(np.sqrt(((md[1:]- md[:-1])**2).mean()))
   i += 1
 
 params["SimSpread"] = mean_sp
 params["SimVolatility"] = vol
 
-params.to_csv("PP_2.csv")
+params.to_csv("PP_3.csv")

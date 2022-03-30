@@ -66,7 +66,7 @@ def find_v0(data):
     return int(data["size"].sum()/len(data))
 
 def find_u(data,n1,n2,n3,v):
-    return data["size"].sum()/ (2*v) / (n1+n2+n3)
+    return data["size"].sum() / (2*v) / (n1+n2+n3)
 
 def find_nu(data,n1,n2,n3,v):
     return data["size"].sum()/ (2*v) / (n1+n2+n3)
@@ -77,7 +77,7 @@ def find_mean_vol(data):
     return (v_a + v_b) / 2
 
 def find_l(n1,n2,n3):
-    return n1 / (n1 + n2 + n3)
+    return  n1 / (n1 + n2 + n3)
 
 def find_gap_to_spread(df):
     gap_bid = (df["bid price"] - df["bid 2"]).mean()
@@ -110,6 +110,32 @@ def unite_market_orders(data):
 
     m_data = m_data.iloc[unique_orders]
     return m_data
+
+def find_quotes(data):
+    quotes = data[["bid price", "bid vol", "ask price", "ask vol"]].diff().fillna(0)
+    quotes["quote"] = np.ones(data.shape[0])
+
+    # BidPrice_0 > 0
+    con = (quotes["bid price"] != 0)
+    a = quotes.loc[con].index.to_numpy()
+    quotes.loc[a,["quote"]] = 0
+
+    # AskPrice_0 > 0
+    con = (quotes["ask price"] != 0)
+    a = quotes.loc[con].index.to_numpy()
+    quotes.loc[a,["quote"]] = 0
+
+    # BidPrice_0 > 0
+    con = (quotes["bid price"] == 0) & (quotes["bid vol"] != 0)
+    a = quotes.loc[con].index.to_numpy()
+    quotes.loc[a,["quote"]] = 0
+
+    # AskPrice_0 > 0
+    con = (quotes["ask price"] == 0) & (quotes["ask vol"] != 0)
+    a = quotes.loc[con].index.to_numpy()
+    quotes.loc[a,["quote"]] = 0
+
+    return quotes["quote"].to_list()
 
 if __name__=="__main__":
 
@@ -148,15 +174,17 @@ if __name__=="__main__":
         dfu = load_LOB_data(filepath_order, filepath_message)
         df = del_time(dfu)
 
+        df["quote"] = find_quotes(df)
+
         mean_vol = find_mean_vol(df)
         mean_volume[i] = mean_vol
 
         #limit order at the best price
-        X_lo  = df_best_limit_prices(df,1)
+        X_lo = df.loc[(df["event type"]==1) & (df["quote"] == 0)]
         #cancellations at the best prices
-        X_c  = df_best_prices(df,3)
+        X_c  = df.loc[(df["event type"]==3) & (df["quote"] == 0)]
         #market orders at the best prices (ignore hidden orders)
-        X_mo = unite_market_orders(df)
+        X_mo = df[df["event type"] == 4]
 
         N_mo  = len(X_mo)
         N_lo  = len(X_lo)
@@ -186,36 +214,4 @@ if __name__=="__main__":
 
     parameters = np.column_stack((date, mid_price, spread, lamb, nu, mu, shares, mean_volume,
                     volatility, gap))
-    np.savetxt("../data/santa_fe_parameter_estimation_5.txt", parameters, delimiter = ",")
-
-    all_data = pd.concat(lst_df)
-    all_data.reset_index(inplace=True)
-    mean_vol = find_mean_vol(all_data)
-    print ("mean volume = ", mean_vol)
-
-    #limit order at the best price
-    X_lo  = df_best_limit_prices(all_data,1)
-    #cancellations at the best prices
-    X_c  = df_best_prices(all_data,3)
-    #market orders at the best prices (ignore hidden orders)
-    X_mo = unite_market_orders(all_data)
-
-    N_mo  = len(X_mo)
-    N_lo  = len(X_lo)
-    N_c   = len(X_c)
-
-    print(f"N_lo {N_lo}, N_mo {N_mo}, N_c {N_c}")
-
-    #tt = df.time.max() - df.time.min()
-    v0 = find_v0(X_lo)
-    u  = find_u(X_mo,N_lo,N_mo,N_c,v0)
-    v  = find_u(X_c,N_lo,N_mo,N_c,mean_vol)
-    l_all  = find_l(N_lo,N_mo,N_c)
-    n = 2 * (1 + ((X_lo["spread"] // 2).mean()))
-    l = l_all / n
-
-    print("Mid Price = ", df["mid price"].mean())
-    print("Spread = ", df["spread"].mean())
-    print("Lambda = ", l)
-    print("Mu = ", u)
-    print("Delta = ", v)
+    np.savetxt("../data/santa_fe_parameter_estimation_6.txt", parameters, delimiter = ",")
