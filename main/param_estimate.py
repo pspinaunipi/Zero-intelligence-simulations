@@ -16,7 +16,7 @@ import numpy as np
 from numba import njit
 from scipy.optimize import curve_fit
 import scipy.stats
-from santa_fe_2 import *
+from santa_fe_4 import *
 
 
 plt.style.use('dark_background')
@@ -110,7 +110,7 @@ for j, data in enumerate(lst_df):
       v0 = X_lo["Volume"].mean()
       vv = (df["BidVolume_0"].mean() + df["AskVolume_0"].mean()) / 2
       u.append(0.5 / tot / v0 * (X_mo["Volume"].sum()))
-      all_l =  N_lo / tot
+      all_l =  0.5 * N_lo / tot
       n = 2 * (1 + ((X_lo["Spread"] // 2).mean()))
       l.append(all_l / n)
       delta.append(.5 / tot / vv * (X_c["Volume"].sum()))
@@ -139,20 +139,22 @@ vol = []
 
 i = 0
 for limit, market, cancel in zip(l, u, delta):
-  print(i)
   sp = np.array([-1])
+  daily_sp = int(params["MeanSpread"].at[i])
   while all(element > 0 for element in sp) is False:
-    lob, _, _, _  = simulate_lob(limit, market, cancel, 7500, 500_000)
-    lob = lob[100_000:]
-    md, sp = find_mid_spread_lob(lob)
+    lob, sp, md, shift  = sim_LOB(limit, market, cancel, daily_sp * 60, 500_000)
+
     if all(element > 0 for element in sp) is False:
         print("Fail")
   mean_sp.append(sp.mean())
-  mm = np.log(md)
-  vol.append(np.sqrt(((md[1:]- md[:-1])**2).mean()))
+  mm = md + shift.cumsum()
+  volatility = np.sqrt(((mm[1:]- mm[:-1])**2).mean())
+  vol.append(volatility)
+  print(i, sp.mean(), volatility)
+  print(i, params["MeanSpread"].at[i], params["Volatility"].at[i])
   i += 1
 
 params["SimSpread"] = mean_sp
 params["SimVolatility"] = vol
 
-params.to_csv("PP_3.csv")
+params.to_csv("PP_4.csv")

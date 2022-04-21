@@ -95,21 +95,11 @@ def del_time(data):
 def unite_market_orders(data):
     m_data = data[data["event type"] == 4]
     m_data["time"] = (m_data["time"]*100) // 1
-    value = m_data["time"].iat[0]
-    unique_orders = []
-    #iterate over all the row in the dataframe and check if there is a difference higher
-    # than 1/100 sec between two market order, if this is not the case the two orders
-    # are considered the same
-    for i,element in enumerate(m_data["time"]):
-        if element == value:
-            j = i + 1
-            while value == element and j < len(m_data):
-                value = m_data["time"].iat[j]
-                j += 1
-            unique_orders.append(i)
+    grouped_market = m_data.groupby("time")["size"].sum()
+    market_volume = grouped_market.sum()
+    num_market = len(grouped_market)
+    return num_market, market_volume
 
-    m_data = m_data.iloc[unique_orders]
-    return m_data
 
 def find_quotes(data):
     quotes = data[["bid price", "bid vol", "ask price", "ask vol"]].diff().fillna(0)
@@ -176,25 +166,24 @@ if __name__=="__main__":
 
         df["quote"] = find_quotes(df)
 
-        mean_vol = find_mean_vol(df)
-        mean_volume[i] = mean_vol
-
         #limit order at the best price
-        X_lo = df.loc[(df["event type"]==1) & (df["quote"] == 0)]
+        X_lo = df.loc[(df["event type"] == 1) & (df["quote"] == 0)]
         #cancellations at the best prices
-        X_c  = df.loc[(df["event type"]==3) & (df["quote"] == 0)]
+        X_c  = df.loc[(df["event type"].isin([2,3]))  & (df["quote"] == 0)]
         #market orders at the best prices (ignore hidden orders)
-        X_mo = df[df["event type"] == 4]
-
-        N_mo  = len(X_mo)
+        N_mo, vol_mo  = unite_market_orders(df)
         N_lo  = len(X_lo)
         N_c   = len(X_c)
         tot   = N_mo + N_lo + N_c
         print(f"N_lo {N_lo}, N_mo {N_mo}, N_c {N_c}")
-
         #tt = df.time.max() - df.time.min()
-        v0 = find_v0(X_lo)
-        u  = 0.5 / tot * X_mo["size"].sum() / v0
+        v0 = X_lo["size"].mean()
+
+        mean_vol = find_mean_vol(df)
+        print(mean_vol)
+        mean_volume[i] = mean_vol
+
+        u  = 0.5 / tot * vol_mo / v0
         v  = 0.5 / tot * X_c["size"].sum() / mean_vol
         l_all  = 0.5 * N_lo / tot
         n = 2 * (1 + ((X_lo["spread"] // 2).mean()))
@@ -214,4 +203,4 @@ if __name__=="__main__":
 
     parameters = np.column_stack((date, mid_price, spread, lamb, nu, mu, shares, mean_volume,
                     volatility, gap))
-    np.savetxt("../data/santa_fe_parameter_estimation_8.txt", parameters, delimiter = ",")
+    np.savetxt("../data/santa_fe_parameter_estimation_9.txt", parameters, delimiter = ",")

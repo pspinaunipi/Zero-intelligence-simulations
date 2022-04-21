@@ -68,7 +68,7 @@ def find_spread(arr):
     return best_ask - best_bid
 
 @njit()
-def sim_LOB(l_rate, m_rate, c_rate, k, iterations):
+def sim_LOB(l_rate, m_rate, c_rate, k = 100, iterations = 10_000, all_lob = False):
 
     #initialize LOB
     lob = np.ones(k, dtype = np.int16)
@@ -84,6 +84,9 @@ def sim_LOB(l_rate, m_rate, c_rate, k, iterations):
     time_c = inter_arrival(c_rate * np.abs(lob).sum())
     times = np.array([time_l, time_m, time_c])
 
+
+    all = []
+
     for i in range(iterations):
         # find type next order
         o_type = np.argmin(times)
@@ -95,13 +98,11 @@ def sim_LOB(l_rate, m_rate, c_rate, k, iterations):
             times -= times[o_type]
             times[o_type] = inter_arrival(k * l_rate)
 
-
         elif o_type == 1:
             price, sign = do_market_order(lob)
             #update_times
             times -= times[o_type]
             times[o_type] = inter_arrival(2 * m_rate)
-
 
         else:
             price, sign = do_cancel_order(lob, mp)
@@ -109,6 +110,7 @@ def sim_LOB(l_rate, m_rate, c_rate, k, iterations):
             times -= times[o_type]
             times[o_type] = inter_arrival(c_rate * np.abs(lob).sum())
 
+        #update lob spread and mid price
         lob[price] += sign
         spr[i] = find_spread(lob)
         new_mp = find_mid_price(lob)
@@ -116,6 +118,10 @@ def sim_LOB(l_rate, m_rate, c_rate, k, iterations):
         shift = int(new_mp - k//2)
         arr_shift[i] = shift
 
+        if all_lob is True:
+            all.append(lob)
+
+        #center LOB around mid price
         if shift > 0:
             lob[:-shift] = lob[shift:]
             lob[-shift:] = np.zeros(len(lob[-shift:]))
@@ -123,17 +129,22 @@ def sim_LOB(l_rate, m_rate, c_rate, k, iterations):
             lob[-shift:] = lob[:shift]
             lob[:-shift] = np.zeros(len(lob[:-shift]))
 
-    return lob, spr, mid_price, arr_shift
+    price = arr_shift.cumsum() + mid_price
+
+
+    return lob, spr, price, all
+
 
 if __name__ == "__main__":
     rate_lim = 0.023
     rate_m   = 0.062
     rate_del = 0.109
 
-    llob, sp, md, shift = sim_LOB(rate_lim, rate_m, rate_del, 250, 300_000)
-    plt.bar(np.arange(250), llob)
+    llob, sp, mm = sim_LOB(rate_lim, rate_m, rate_del, 250, 300_000, all_lob = False)
+    plt.bar(np.arange(250), gg[-500])
     plt.show()
-    mm = md + shift.cumsum()
     vol = np.sqrt(((mm[1:]- mm[:-1])**2).mean())
     print(sp.mean())
     print(vol)
+    plt.plot(mm)
+    plt.show()
