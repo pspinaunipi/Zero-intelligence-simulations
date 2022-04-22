@@ -123,7 +123,7 @@ def sim_LOB(l_rate, m_rate, c_rate, k = 100, iterations = 10_000, all_lob = Fals
         arr_type[i] = o_type
 
         if all_lob is True:
-            all.append(lob)
+            all.append(lob.copy())
 
         #center LOB around mid price
         if shift > 0:
