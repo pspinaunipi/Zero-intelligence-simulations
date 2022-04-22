@@ -77,6 +77,8 @@ def sim_LOB(l_rate, m_rate, c_rate, k = 100, iterations = 10_000, all_lob = Fals
     spr = np.zeros(iterations)
     mid_price = np.zeros(iterations)
     arr_shift = np.zeros(iterations)
+    arr_sign  = np.zeros(iterations)
+    arr_type  = np.zeros(iterations)
 
     #compute inter arrival times
     time_l = inter_arrival(k * l_rate)
@@ -117,6 +119,8 @@ def sim_LOB(l_rate, m_rate, c_rate, k = 100, iterations = 10_000, all_lob = Fals
         mid_price[i] = new_mp
         shift = int(new_mp - k//2)
         arr_shift[i] = shift
+        arr_sign[i] = sign
+        arr_type[i] = o_type
 
         if all_lob is True:
             all.append(lob)
@@ -132,7 +136,7 @@ def sim_LOB(l_rate, m_rate, c_rate, k = 100, iterations = 10_000, all_lob = Fals
     price = arr_shift.cumsum() + mid_price
 
 
-    return lob, spr, price, all
+    return lob, spr, price, all, arr_sign, arr_type
 
 
 if __name__ == "__main__":

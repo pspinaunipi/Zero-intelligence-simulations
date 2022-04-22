@@ -2,6 +2,8 @@ import santa_fe_4
 import numpy as np
 from numba import njit
 import matplotlib.pyplot as plt
+from fbm import fgn
+
 
 @njit()
 def generate_order(arr, df, s , loc, lenght):
@@ -40,7 +42,7 @@ def cancel_order(arr):
     else:
         sign = 1
     return price, sign
-
+@njit()
 def do_limit_order(arr, df, s , loc, lenght):
     sign = santa_fe_4.rand_sign()
 
@@ -61,7 +63,7 @@ def do_limit_order(arr, df, s , loc, lenght):
 
     return int(pos + 0.5), sign
 
-
+@njit()
 def sim_LOB(l_rate, m_rate, c_rate, k, iterations, df = 1.10, scale = 42, loc = -16):
 
     #initialize LOB
@@ -82,7 +84,6 @@ def sim_LOB(l_rate, m_rate, c_rate, k, iterations, df = 1.10, scale = 42, loc = 
         # find type next order
         o_type = np.argmin(times)
         mp = santa_fe_4.find_mid_price(lob)
-
         if o_type == 0:
             price, sign = do_limit_order(lob, df, scale, loc, k)
             #update_times
@@ -152,18 +153,19 @@ def MF_sim(l_rate, m_rate, c_rate, k, iterations, df = 1.10, scale = 42):
 
 
 if __name__ == "__main__":
-    rate_lim = 0.01
+    rate_lim = 0.023
     rate_m   = 0.062
-    rate_del = 0.001
+    rate_del = 0.103
+    arr_sign = np.sign(fgn(n=300_000, hurst=0.75, length=1, method='daviesharte'))
 
-    llob, sp, md = MF_sim(rate_lim, rate_m, rate_del, 300, 30_000)
-    plt.bar(np.arange(-150, 150), llob)
+    llob, sp, md = sim_LOB(rate_lim, rate_m, rate_del, 500, 300_000)
+    plt.bar(np.arange(-250, 250), llob)
     plt.show()
     mm = md
     vol = np.sqrt(((mm[1:]- mm[:-1])**2).mean())
     print(sp.mean())
     print(vol)
-    plt.hist(sp, bins = np.arange(0,100,10))
+    plt.hist(sp, bins = np.arange(0,50,1))
     plt.show()
     plt.plot(mm)
     plt.show()
