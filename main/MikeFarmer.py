@@ -3,9 +3,9 @@ import numpy as np
 from numba import njit
 import matplotlib.pyplot as plt
 from fbm import fgn
+import scipy.stats
 
 
-@njit()
 def generate_order(arr, df, s , loc, lenght):
     sign = santa_fe_4.rand_sign()
 
@@ -31,7 +31,7 @@ def generate_order(arr, df, s , loc, lenght):
 
     return int(pos + 0.5), sign
 
-@njit()
+
 def cancel_order(arr):
     tot = np.abs(arr).sum()
     pos = np.random.randint(tot)
@@ -42,75 +42,135 @@ def cancel_order(arr):
     else:
         sign = 1
     return price, sign
-@njit()
-def do_limit_order(arr, df, s , loc, lenght):
-    sign = santa_fe_4.rand_sign()
+
+def do_market_order(arr, sign):
+
+    if sign == 1:
+        pos  = np.where(arr < 0)[0][0]
+    else:
+        pos = np.where(arr > 0)[0][-1]
+
+    return pos
+
+
+def do_cancel_order(arr, mid_p, sign):
+
+    n_orders_bid = arr[arr > 0].sum()
+    n_orders_ask = -(arr[arr < 0].sum())
+
+    if sign == 1:
+        pos = np.random.randint(n_orders_bid)
+    else:
+        pos = np.random.randint(n_orders_bid , n_orders_ask + n_orders_bid)
+
+    pos_orders = np.abs(arr).cumsum()
+
+    price =  np.where(pos_orders > pos)[0][0]
+
+    return price
+
+def do_limit_order(arr, df, s , ll, lenght, sign):
 
     if sign == 1:
         best_price = np.where(arr > 0)[0][-1]
         opposite = np.where(arr < 0)[0][0]
         pos = -8
         while pos <= 0 or pos >= opposite:
-            pos = np.random.standard_t(df) * s + loc + best_price
-    else:
+            pos = int(scipy.stats.t.rvs(df, loc = ll, scale = s) + best_price + 0.5)
 
+    else:
         best_price = np.where(arr < 0)[0][0]
         opposite = np.where(arr > 0)[0][-1]
         pos = 10e10
-        while pos >= lenght - 0.5 or pos <= opposite:
-            pos = best_price - np.random.standard_t(df) * s - loc
+        while pos >= lenght or pos <= opposite:
+            pos = int(best_price - scipy.stats.t.rvs(df, loc = ll , scale = s) + 0.5)
 
 
-    return int(pos + 0.5), sign
+    return pos
 
-@njit()
-def sim_LOB(l_rate, m_rate, c_rate, k, iterations, df = 1.10, scale = 42, loc = -16):
+
+def sim_LOB(l_rate, m_rate, c_rate, k, iterations, df = 1.10, scale = 42, loc = -16, h_exp = 0.6):
 
     #initialize LOB
     lob = np.ones(k, dtype = np.int16)
     lob[k//2:] = -1
+    #cumpute sign using fractional gaussian noise
+    arr_sign = np.sign(fgn(n = int(iterations * 1.2), hurst = h_exp, length = 1, method = 'daviesharte'))
 
-    spr = np.zeros(iterations)
-    mid_price = np.zeros(iterations)
-    arr_shift = np.zeros(iterations)
-
+    spr = np.zeros(int(iterations * 1.2))
+    mid_price = np.zeros(int(iterations * 1.2))
+    arr_shift = np.zeros(int(iterations * 1.2))
+    arr_type = np.zeros(int(iterations * 1.2))
+    tot_orders = np.zeros(int(iterations * 1.2))
     #compute inter arrival times
-    time_l = santa_fe_4.inter_arrival(l_rate * k)
-    time_m = santa_fe_4.inter_arrival(m_rate * 2)
-    time_c = santa_fe_4.inter_arrival(c_rate * np.abs(lob).sum())
-    times = np.array([time_l, time_m, time_c])
+    next_order = santa_fe_4.inter_arrival(l_rate + m_rate + c_rate * np.abs(lob).sum())
 
-    for i in range(iterations):
+    for i in range(int(iterations * 1.2)):
+        bid_size = lob[lob > 0].sum()
+        ask_size = -lob[lob < 0].sum()
+
+        sign = arr_sign[i]
+
+        tot = l_rate + m_rate + c_rate * np.abs(lob).sum()
         # find type next order
-        o_type = np.argmin(times)
-        mp = santa_fe_4.find_mid_price(lob)
-        if o_type == 0:
-            price, sign = do_limit_order(lob, df, scale, loc, k)
-            #update_times
-            times -= times[o_type]
-            times[o_type] = santa_fe_4.inter_arrival(l_rate * k)
 
+        FLAG = False
+        while FLAG is False:
+            o_type = np.random.choice([0,1,2], p = [l_rate / tot, m_rate / tot, c_rate * np.abs(lob).sum() / tot])
+
+            # do not cancel the last quote
+            if bid_size > 1 and ask_size > 1:
+                FLAG = True
+
+            elif bid_size == 1 and sign == 1 and o_type == 2:
+                FLAG= False
+
+            elif bid_size == 1 and sign == -1 and o_type == 1:
+                FLAG= False
+
+            elif ask_size == 1 and  sign == -1 and o_type == 2:
+                FLAG= False
+
+            elif ask_size == 1 and sign == 1 and o_type == 1:
+                FLAG= False
+
+            else:
+                FLAG = True
+
+        mp = santa_fe_4.find_mid_price(lob)
+
+        if o_type == 0:
+            price = do_limit_order(lob, df, scale, loc, k, sign)
 
         elif o_type == 1:
-            price, sign = santa_fe_4.do_market_order(lob)
-            #update_times
-            times -= times[o_type]
-            times[o_type] = santa_fe_4.inter_arrival(m_rate * 2)
-
+            price = do_market_order(lob, sign)
 
         else:
-            price, sign = santa_fe_4.do_cancel_order(lob, mp)
-            #update_times
-            times -= times[o_type]
-            times[o_type] = santa_fe_4.inter_arrival(c_rate * np.abs(lob).sum())
+            price = do_cancel_order(lob, mp, sign)
+            sign = - sign
 
 
         lob[price] += sign
         spr[i] = santa_fe_4.find_spread(lob)
         new_mp = santa_fe_4.find_mid_price(lob)
         mid_price[i] = new_mp
+        arr_type[i] = o_type
+        tot_orders[i] = np.abs(lob).sum()
 
-    return lob, spr, mid_price
+        shift = int(new_mp - k//2)
+        arr_shift[i] = shift
+
+        #center LOB around mid price
+        if shift > 0:
+            lob[:-shift] = lob[shift:]
+            lob[-shift:] = np.zeros(len(lob[-shift:]))
+        elif shift < 0:
+            lob[-shift:] = lob[:shift]
+            lob[:-shift] = np.zeros(len(lob[:-shift]))
+
+    price = arr_shift.cumsum() + mid_price
+
+    return lob[-iterations:], spr[-iterations:], price[-iterations:], arr_type[-iterations:]
 
 @njit()
 def MF_sim(l_rate, m_rate, c_rate, k, iterations, df = 1.10, scale = 42):
@@ -150,22 +210,3 @@ def MF_sim(l_rate, m_rate, c_rate, k, iterations, df = 1.10, scale = 42):
             bb = len(np.where(lob > 0)[0])
             oo = len(np.where(lob < 0)[0])
     return lob, spr, mid_price
-
-
-if __name__ == "__main__":
-    rate_lim = 0.023
-    rate_m   = 0.062
-    rate_del = 0.103
-    arr_sign = np.sign(fgn(n=300_000, hurst=0.75, length=1, method='daviesharte'))
-
-    llob, sp, md = sim_LOB(rate_lim, rate_m, rate_del, 500, 300_000)
-    plt.bar(np.arange(-250, 250), llob)
-    plt.show()
-    mm = md
-    vol = np.sqrt(((mm[1:]- mm[:-1])**2).mean())
-    print(sp.mean())
-    print(vol)
-    plt.hist(sp, bins = np.arange(0,50,1))
-    plt.show()
-    plt.plot(mm)
-    plt.show()
